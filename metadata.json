@@ -1,0 +1,6 @@
+{
+  "name": "Pulso Clase",
+  "description": "Herramienta ágil para docentes y alumnos: preguntas de salida, termómetro de comprensión en tiempo real y comentarios anónimos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
