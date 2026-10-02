@@ -5,7 +5,9 @@
 import { ConteoVotos, SesionClase, VotoRegistro } from '../types';
 
 export const CLAVE_LOCALSTORAGE = 'pulso_clase_sesion_v1';
+export const CLAVE_HISTORIAL = 'pulso_clase_historial_v1';
 
+export const TEMA_PREDETERMINADO = 'Matemática - Derivadas y Funciones';
 export const PREGUNTA_PREDETERMINADA = '¿Qué tan claro quedó el tema visto en la clase de hoy?';
 
 export const CONTEOS_INICIALES: ConteoVotos = {
@@ -15,6 +17,7 @@ export const CONTEOS_INICIALES: ConteoVotos = {
 };
 
 export const SESION_INICIAL: SesionClase = {
+  tema: TEMA_PREDETERMINADO,
   pregunta: PREGUNTA_PREDETERMINADA,
   votos: [],
   conteos: { ...CONTEOS_INICIALES },
@@ -41,6 +44,9 @@ export function cargarSesion(): SesionClase {
     
     // Verificación defensiva de la integridad de los datos
     return {
+      tema: typeof parseado.tema === 'string' && parseado.tema.trim().length > 0
+        ? parseado.tema
+        : TEMA_PREDETERMINADO,
       pregunta: typeof parseado.pregunta === 'string' && parseado.pregunta.trim().length > 0 
         ? parseado.pregunta 
         : PREGUNTA_PREDETERMINADA,
@@ -100,4 +106,53 @@ export function registrarVotoEnSesion(
 
   guardarSesion(nuevaSesion);
   return nuevaSesion;
+}
+
+/**
+ * Guarda la sesión que está terminando en el historial de sesiones archivadas.
+ * 
+ * ¡PUNTO CLAVE DONDE ALGUIEN SUELE EQUIVOCARSE!:
+ * Si la sesión actual no tiene ningún voto registrado (total = 0), archivarla crearía
+ * un historial lleno de sesiones vacías innecesarias. Solo archivamos si contiene información útil,
+ * o le asignamos un identificador único con fecha para que el docente pueda consultarla luego.
+ */
+export function guardarSesionEnHistorial(sesion: SesionClase): void {
+  try {
+    const totalVotos =
+      sesion.conteos['Entendí'] +
+      sesion.conteos['Tengo dudas'] +
+      sesion.conteos['Me perdí'];
+
+    // Si no tiene votos ni comentarios, no sobrecargamos el historial
+    if (totalVotos === 0 && sesion.votos.length === 0) {
+      return;
+    }
+
+    const historialPrevio = cargarHistorial();
+    const sesionArchivada: SesionClase = {
+      ...sesion,
+      creadaEn: sesion.creadaEn || new Date().toISOString(),
+    };
+
+    // Agregamos al inicio para que las más recientes aparezcan primero
+    const nuevoHistorial = [sesionArchivada, ...historialPrevio].slice(0, 30); // Limitar a las últimas 30 clases
+    localStorage.setItem(CLAVE_HISTORIAL, JSON.stringify(nuevoHistorial));
+  } catch (error) {
+    console.warn('Aviso: No fue posible archivar la sesión en el historial.', error);
+  }
+}
+
+/**
+ * Recupera la lista de sesiones archivadas previamente.
+ */
+export function cargarHistorial(): SesionClase[] {
+  try {
+    const raw = localStorage.getItem(CLAVE_HISTORIAL);
+    if (!raw) return [];
+    const parseado = JSON.parse(raw);
+    return Array.isArray(parseado) ? parseado : [];
+  } catch (error) {
+    console.error('Aviso: Error al leer historial de sesiones.', error);
+    return [];
+  }
 }

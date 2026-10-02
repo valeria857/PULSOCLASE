@@ -22,6 +22,7 @@ export interface ConteoVotos {
 }
 
 export interface SesionClase {
+  tema: string; // Tema o materia de la clase actual
   pregunta: string;
   votos: VotoRegistro[];
   conteos: ConteoVotos;

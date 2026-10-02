@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Header } from './components/Header';
+import { ClassTopicSelector } from './components/ClassTopicSelector';
 import { ExitQuestionCard } from './components/ExitQuestionCard';
 import { VoteForm } from './components/VoteForm';
 import { InteractiveBarChart } from './components/InteractiveBarChart';
@@ -8,28 +9,40 @@ import {
   cargarSesion,
   guardarSesion,
   registrarVotoEnSesion,
+  guardarSesionEnHistorial,
+  cargarHistorial,
   CONTEOS_INICIALES,
 } from './utils/storage';
 import { OpcionVoto, SesionClase } from './types';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, CheckCircle2 } from 'lucide-react';
 
 export default function App() {
-  // ¡PUNTO CLAVE DONDE ALGUIEN SUELE EQUIVOCARSE!:
-  // Usar la función de inicialización perezosa `useState(() => cargarSesion())`.
-  // Si se ejecuta `useState(cargarSesion())`, se accedería a `localStorage` y se deserializaría
-  // el JSON en CADA renderizado de React, ralentizando la aplicación en dispositivos móviles.
+  // Inicialización perezosa de la sesión actual y del historial archivado
   const [sesion, setSesion] = useState<SesionClase>(() => cargarSesion());
+  const [historial, setHistorial] = useState<SesionClase[]>(() => cargarHistorial());
 
   // Estado para el filtro interactivo del gráfico y la lista de comentarios
   const [filtroActivo, setFiltroActivo] = useState<OpcionVoto | 'Todos'>('Todos');
+  const [mensajeNuevaSesion, setMensajeNuevaSesion] = useState(false);
 
-  // Acción 1 & 3: Registro inmediato de voto y comentario anónimo
+  // Registro inmediato de voto y comentario anónimo
   const handleEnviarVoto = (opcion: OpcionVoto, comentario?: string) => {
-    // Registra el voto de manera inmutable y actualiza el gráfico al instante
     setSesion((prev) => registrarVotoEnSesion(prev, opcion, comentario));
   };
 
-  // Acción 1: Modificar la pregunta de salida para la clase
+  // Función 1: Actualizar el Tema o Materia de la clase actual
+  const handleActualizarTema = (nuevoTema: string) => {
+    setSesion((prev) => {
+      const actualizada: SesionClase = {
+        ...prev,
+        tema: nuevoTema,
+      };
+      guardarSesion(actualizada);
+      return actualizada;
+    });
+  };
+
+  // Actualizar la pregunta de salida para la clase
   const handleActualizarPregunta = (nuevaPregunta: string) => {
     setSesion((prev) => {
       const actualizada: SesionClase = {
@@ -41,23 +54,33 @@ export default function App() {
     });
   };
 
-  // Acción: Reiniciar el conteo para una nueva clase o tema
-  const handleReiniciar = () => {
+  // Función 2: 'Iniciar Nueva Sesión / Reiniciar Votos' guardando la sesión anterior
+  const handleIniciarNuevaSesion = () => {
+    // 1. Guardamos la sesión anterior en el historial si tenía votos o comentarios
+    guardarSesionEnHistorial(sesion);
+    setHistorial(cargarHistorial());
+
+    // 2. Limpiamos el gráfico de barras y los comentarios en pantalla, conservando el tema y pregunta
     setSesion((prev) => {
-      const reiniciada: SesionClase = {
+      const nuevaSesion: SesionClase = {
         ...prev,
         votos: [],
         conteos: { ...CONTEOS_INICIALES },
+        creadaEn: new Date().toISOString(),
       };
-      guardarSesion(reiniciada);
-      return reiniciada;
+      guardarSesion(nuevaSesion);
+      return nuevaSesion;
     });
+
     setFiltroActivo('Todos');
+    setMensajeNuevaSesion(true);
+    setTimeout(() => setMensajeNuevaSesion(false), 3500);
   };
 
   // Acción: Cargar datos de prueba de una clase realista para validar el gráfico
   const handleCargarDemo = () => {
     const sesionDemo: SesionClase = {
+      tema: sesion.tema || 'Matemática - Derivadas y Funciones',
       pregunta: sesion.pregunta,
       creadaEn: new Date().toISOString(),
       conteos: {
@@ -110,15 +133,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-100/70 text-slate-900 flex flex-col font-sans">
-      {/* Barra superior compacta con acciones */}
+      {/* Barra superior con botón 'Iniciar Nueva Sesión / Reiniciar Votos' y acceso al historial */}
       <Header
-        onReiniciar={handleReiniciar}
+        onIniciarNuevaSesion={handleIniciarNuevaSesion}
         onCargarDemo={handleCargarDemo}
         totalVotos={totalVotos}
+        historial={historial}
       />
 
-      {/* Contenedor principal optimizado para móviles (pantallas de 375px a 430px) y responsive */}
+      {/* Contenedor principal responsive */}
       <main className="w-full max-w-md mx-auto px-3.5 py-4 space-y-3.5 flex-1">
+        {/* Notificación suave al guardar sesión anterior e iniciar nueva */}
+        {mensajeNuevaSesion && (
+          <div className="p-3 bg-indigo-50 border border-indigo-200 text-indigo-900 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in slide-in-from-top-1 duration-200">
+            <CheckCircle2 className="w-4 h-4 text-indigo-600 shrink-0" />
+            <span>¡Sesión anterior guardada con éxito en el historial! Gráfico listo para la nueva clase.</span>
+          </div>
+        )}
+
+        {/* Función complementaria 1: Selector / campo para ingresar Tema o Materia de la clase */}
+        <ClassTopicSelector
+          temaActual={sesion.tema}
+          onActualizarTema={handleActualizarTema}
+        />
+
         {/* Función 1: Registrar y visualizar la pregunta de salida */}
         <ExitQuestionCard
           pregunta={sesion.pregunta}
@@ -135,14 +173,14 @@ export default function App() {
           onSeleccionarFiltro={setFiltroActivo}
         />
 
-        {/* Función 3 (Visualización): Comentarios anónimos recibidos */}
+        {/* Función 3: Comentarios anónimos recibidos */}
         <AnonymousCommentsList
           votos={sesion.votos}
           filtroActivo={filtroActivo}
           onCambiarFiltro={setFiltroActivo}
         />
 
-        {/* Nota pedagógica y de privacidad */}
+        {/* Pie informativo */}
         <footer className="pt-2 pb-6 text-center text-slate-400 text-[11px] flex items-center justify-center gap-1.5">
           <ShieldCheck className="w-3.5 h-3.5 text-slate-400" />
           <span>PULSO CLASE · Sin registros personales ni cuentas obligatorias</span>
